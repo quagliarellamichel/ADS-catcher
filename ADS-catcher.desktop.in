@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=ADS-catcher
+GenericName=Ricevitore ADS-B
+Comment=Ricezione ADS-B degli aerei a 1090 MHz con HackRF, mappa su http://127.0.0.1:8101
+Exec=@BIN@ --pause
+Icon=preferences-system-network
+Terminal=true
+Categories=Network;HamRadio;
+Keywords=ADS-B;ModeS;SDR;HackRF;aerei;volo;
