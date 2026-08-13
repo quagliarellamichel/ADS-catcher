@@ -202,6 +202,11 @@ vettorizzata in numpy e decodifica in Python solo sui candidati sopravvissuti.
 * posizioni al suolo solo con `--qth` o dopo una posizione già nota
 * nessun formato d'uscita per altri programmi (BaseStation, Beast)
 
+## Licenza
+
+MIT — vedi [LICENSE](LICENSE). Fanne quel che vuoi, basta che tieni la nota di
+copyright.
+
 ## Ringraziamenti
 
 La logica di ricerca del preambolo segue quella di
