@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install numpy
+      - name: suite di regressione
+        run: python -m unittest discover -s test -v
+      - name: controlli rapidi incorporati
+        run: python adsb-catcher.py --selftest
+      - name: catena completa su segnale sintetico
+        run: |
+          python strumenti/genera_iq.py prova.iq
+          python adsb-catcher.py --file prova.iq --raw --web 0 | tee esito.txt
+          test "$(grep -c ICAO esito.txt)" -eq 5

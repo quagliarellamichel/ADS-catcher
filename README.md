@@ -84,6 +84,13 @@ Le tessere sono di OpenStreetMap e Leaflet arriva da CDN, quindi la mappa
 richiede una connessione a internet; senza, l'elenco degli aerei continua a
 funzionare.
 
+## Documentazione
+
+| documento | contenuto |
+|---|---|
+| [ARCHITETTURA.md](ARCHITETTURA.md) | schemi di funzionamento: catena del segnale, forma d'onda, struttura dei messaggi, thread, CPR |
+| [decisioni/](decisioni/) | perché è fatto così: una scheda per decisione, con le alternative scartate |
+
 ## Come funziona
 
 ### Demodulazione
@@ -153,14 +160,29 @@ strumenti/genera_iq.py prova.iq
 ./adsb-catcher.py --file prova.iq --loop --qth 52.0,3.4   # per vedere la mappa
 ```
 
-Ci sono anche 16 controlli sul decoder, su messaggi di riferimento a risultato
-noto: CRC, `KLM1023`, 38000 ft, 52.2572 N 3.9194 E, 159 kt, 183°, −832 ft/min,
-il recupero di tutti e 112 i possibili errori a un bit, e lo scarto di un
-messaggio con due bit sbagliati.
+Ci sono anche 16 controlli rapidi incorporati nel programma, su messaggi di
+riferimento a risultato noto: CRC, `KLM1023`, 38000 ft, 52.2572 N 3.9194 E,
+159 kt, 183°, −832 ft/min, il recupero di tutti e 112 i possibili errori a un
+bit, e lo scarto di un messaggio con due bit sbagliati.
 
 ```sh
 ./adsb-catcher.py --selftest
 ```
+
+## Test
+
+La suite di regressione sta in `test/` e usa `unittest` della libreria standard:
+nessuna dipendenza in più, nessun accesso alla radio, meno di un secondo.
+
+```sh
+python3 -m unittest discover -s test -v
+```
+
+Copre demodulatore (compresi i messaggi a cavallo fra due letture), CRC e
+correzione, CPR globale e relativa, macchina a stati degli aerei, server web e
+opzioni. È stata validata **per mutazione**: si guasta il codice di proposito e
+si verifica che i test se ne accorgano — vedi
+[decisioni/0008](decisioni/0008-test-e-mutazioni.md).
 
 ## L'antenna conta più di tutto il resto
 

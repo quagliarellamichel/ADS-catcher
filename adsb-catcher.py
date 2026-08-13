@@ -626,6 +626,21 @@ PAGINA = r"""<!doctype html>
   #stat { padding:0 12px 8px; color:#8b97a8; font-size:12px;
           border-bottom:1px solid #2b3340; }
   #stat b { color:#e6e9ef; font-weight:600; }
+  /* overflow-y auto e non visible: cosi' la scheda puo' rimpicciolirsi e su
+     schermi bassi non schiaccia l'elenco a zero */
+  #dettaglio { display:none; padding:10px 12px; border-bottom:1px solid #2b3340;
+               background:#161d27; overflow-y:auto; }
+  #dettaglio.aperto { display:block; }
+  #dettaglio .testa { display:flex; align-items:baseline; gap:8px; margin-bottom:8px; }
+  #dettaglio .nome { font-size:16px; font-weight:700; }
+  #dettaglio .sotto { color:#8b97a8; font-size:12px; }
+  #dettaglio .chiudi { margin-left:auto; cursor:pointer; color:#8b97a8; font-size:16px;
+                       line-height:1; padding:0 2px; }
+  #dettaglio .chiudi:hover { color:#e6e9ef; }
+  #dettaglio dl { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; margin:0; }
+  #dettaglio dt { color:#8b97a8; }
+  #dettaglio dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }
+  #dettaglio .assente { color:#5d6675; }
   #lista { overflow-y:auto; }
   table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
   th { position:sticky; top:0; background:#1a212b; color:#8b97a8; font-weight:500;
@@ -657,6 +672,7 @@ PAGINA = r"""<!doctype html>
 <div id="pannello">
   <h1>ADS-catcher <span id="orologio"></span></h1>
   <div id="stat">in attesa dei dati…</div>
+  <div id="dettaglio"></div>
   <div id="lista"><table><thead><tr>
     <th>Volo</th><th>Alt ft</th><th>kt</th><th>Rot</th><th>V/S</th>
     <th id="thkm">km</th><th>dBFS</th><th>vista</th>
@@ -684,7 +700,11 @@ if (mappa) {
 }
 
 const marcatori = {}, scie = {};
-let qthFatto = false, inquadrato = false, scelto = null;
+let qthFatto = false, inquadrato = false;
+// l'aereo scelto sta nell'ancora dell'indirizzo: il link resta condivisibile
+// e ricaricando la pagina la scheda e' ancora aperta
+let scelto = (location.hash || '').slice(1).toUpperCase() || null;
+let daInquadrare = scelto !== null;
 
 // colore per fascia di quota: dal verde (basso) al viola (alta quota)
 function colore(alt) {
@@ -706,6 +726,76 @@ function icona(a, evidenzia) {
 
 function fmt(v, d) { return (v === null || v === undefined) ? '–' : v.toLocaleString('it-IT',
   {minimumFractionDigits: d || 0, maximumFractionDigits: d || 0}); }
+
+function durata(s) {
+  s = Math.round(s);
+  if (s < 60) return s + ' s';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ' + String(s % 60).padStart(2, '0') + 's';
+  return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+}
+
+// nome della direzione a 16 settori, piu' leggibile dei gradi da soli
+const ROSA = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+function bussola(g) { return ROSA[Math.round(g / 22.5) % 16]; }
+
+function righeDettaglio(a, qth) {
+  const r = [];
+  r.push(['Quota', a.alt === null ? '–' : fmt(a.alt) + ' ft', a.alt === null]);
+  r.push(['Velocità', a.vel === null ? '–'
+      : fmt(a.vel) + ' kt' + (a.tipovel ? ` <span class="sotto">${a.tipovel}</span>` : ''),
+      a.vel === null]);
+  r.push(['Rotta', a.rot === null ? '–' : `${fmt(a.rot)}° ${bussola(a.rot)}`,
+      a.rot === null]);
+  r.push(['Salita', a.vs === null ? '–'
+      : (a.vs > 0 ? '↑ ' : a.vs < 0 ? '↓ ' : '') + fmt(Math.abs(a.vs)) + ' ft/min',
+      a.vs === null]);
+  // coordinate col punto decimale: con la virgola italiana verrebbe
+  // "52,2572, 3,9194", illeggibile e non incollabile in una mappa
+  r.push(['Posizione', a.lat === null ? 'non ancora nota'
+      : `${a.lat.toFixed(4)}, ${a.lon.toFixed(4)}`, a.lat === null]);
+  if (qth) {
+    r.push(['Distanza', a.km === null ? '–'
+        : `${fmt(a.km, 1)} km · ${fmt(a.dir)}° ${bussola(a.dir)}`, a.km === null]);
+  }
+  r.push(['Punti di scia', String(a.traccia.length), !a.traccia.length]);
+  r.push(['Segnale', a.rssi.toFixed(1) + ' dBFS', false]);
+  r.push(['Messaggi', fmt(a.msg), false]);
+  r.push(['In ascolto da', durata(a.da), false]);
+  r.push(['Ultimo messaggio', a.eta < 1 ? 'adesso' : durata(a.eta) + ' fa', a.eta > 45]);
+  return r;
+}
+
+let dettaglioIcao = null;
+
+function dettaglio(a, qth) {
+  const el = document.getElementById('dettaglio');
+  if (!a) { el.className = ''; el.innerHTML = ''; dettaglioIcao = null; return; }
+  const righe = righeDettaglio(a, qth);
+
+  // La struttura si ricostruisce solo quando cambia l'aereo. Rifarla a ogni
+  // aggiornamento cancellerebbe il testo selezionato una volta al secondo, e
+  // farebbe perdere il clic sulla X se cade a cavallo di un aggiornamento.
+  if (dettaglioIcao !== a.icao || el.querySelectorAll('dd').length !== righe.length) {
+    // senza identificativo di volo il nome e' gia' l'ICAO: non ripeterlo sotto
+    const sotto = [a.volo ? a.icao : null, a.cat].filter(Boolean).join(' · ');
+    el.className = 'aperto';
+    el.innerHTML =
+      `<div class="testa"><span class="nome">${a.volo || a.icao}</span>` +
+      `<span class="sotto">${sotto}</span>` +
+      `<span class="chiudi" title="chiudi">✕</span></div><dl>` +
+      righe.map(([et]) => `<dt>${et}</dt><dd></dd>`).join('') + `</dl>`;
+    el.querySelector('.chiudi').onclick = () => selezione(a.icao);
+    dettaglioIcao = a.icao;
+  }
+
+  const celle = el.querySelectorAll('dd');
+  righe.forEach(([, valore, assente], k) => {
+    if (celle[k].innerHTML !== valore) celle[k].innerHTML = valore;
+    const cls = assente ? 'assente' : '';
+    if (celle[k].className !== cls) celle[k].className = cls;
+  });
+}
 
 async function aggiorna() {
   let d;
@@ -785,13 +875,36 @@ async function aggiorna() {
     corpo.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:#8b97a8">' +
                       'nessun aereo ricevuto</td></tr>';
   }
+
+  // La scheda si svuota se l'aereo scelto non c'e' (ancora), ma la scelta
+  // resta: aprendo un link #ICAO prima che quell'aereo si faccia sentire, la
+  // scheda compare da sola appena arriva. Azzerare qui la selezione la
+  // renderebbe irrecuperabile, perche' l'ancora non cambia e hashchange non
+  // scatterebbe mai piu'.
+  const sel = d.aerei.find(a => a.icao === scelto);
+  dettaglio(sel || null, d.qth);
+
+  // un link condiviso deve anche portare la mappa sull'aereo, non solo aprirne
+  // la scheda: si fa una volta sola, appena il marcatore esiste
+  if (daInquadrare && mappa && sel && marcatori[sel.icao]) {
+    mappa.setView(marcatori[sel.icao].getLatLng(), Math.max(mappa.getZoom(), 9));
+    daInquadrare = false;
+    inquadrato = true;
+  }
 }
 
 function selezione(icao) {
   scelto = (scelto === icao) ? null : icao;
+  history.replaceState(null, '', scelto ? '#' + scelto : location.pathname);
   if (mappa && scelto && marcatori[scelto]) mappa.panTo(marcatori[scelto].getLatLng());
   aggiorna();
 }
+
+addEventListener('hashchange', () => {
+  scelto = (location.hash || '').slice(1).toUpperCase() || null;
+  daInquadrare = scelto !== null;
+  aggiorna();
+});
 
 aggiorna();
 setInterval(aggiorna, 1000);
@@ -807,13 +920,18 @@ def istantanea(dec, avvio, adesso):
     aerei = []
     for a in sorted(dec.aerei.values(), key=lambda x: -x.ultimo):
         aerei.append({
-            "icao": f"{a.icao:06X}", "volo": a.volo,
+            "icao": f"{a.icao:06X}", "volo": a.volo, "cat": a.cat,
             "alt": a.alt, "vel": None if a.vel is None else round(a.vel),
-            "rot": None if a.rotta is None else round(a.rotta), "vs": a.vs,
+            "tipovel": a.tipo_vel,
+            "rot": None if a.rotta is None else round(a.rotta) % 360, "vs": a.vs,
             "lat": a.lat, "lon": a.lon,
             "km": None if (rif is None or a.lat is None)
                   else round(distanza_km(rif[0], rif[1], a.lat, a.lon), 1),
-            "rssi": round(a.rssi, 1), "msg": a.msg, "eta": round(adesso - a.ultimo, 1),
+            # il modulo evita che un rilevamento di 359.6 diventi "360 gradi"
+            "dir": None if (rif is None or a.lat is None)
+                   else round(rilevamento(rif[0], rif[1], a.lat, a.lon)) % 360,
+            "rssi": round(a.rssi, 1), "msg": a.msg,
+            "eta": round(adesso - a.ultimo, 1), "da": round(adesso - a.primo, 1),
             "traccia": a.traccia,
         })
     durata = int(max(adesso - avvio, 1))
@@ -864,7 +982,8 @@ class StatoWeb:
 
     def __init__(self):
         self.dati = b'{"ora":"","qth":null,"stat":{"aerei":0,"conpos":0,"msg":0,' \
-                    b'"rate":0,"durata":"0m00s"},"aerei":[]}'
+                    b'"rate":0,"corretti":0,"durata":"0m00s"},"aerei":[]}'
+        self.srv = None                # riempito da avvia_web, serve per fermarlo
 
     def aggiorna(self, oggetto):
         self.dati = json.dumps(oggetto, separators=(",", ":")).encode()
@@ -881,8 +1000,9 @@ def avvia_web(porta):
               f"Usa --web con un'altra porta.")
         return None, None
     srv.daemon_threads = True
+    stato.srv = srv
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    return stato, f"http://127.0.0.1:{porta}"
+    return stato, f"http://127.0.0.1:{srv.server_address[1]}"
 
 
 # ---------------------------------------------------------------------------
