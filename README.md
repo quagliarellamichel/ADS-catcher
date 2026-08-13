@@ -60,6 +60,7 @@ compaiono sulla mappa molto prima.
 | `--no-amp` | spegne il preamplificatore RF da +14 dB |
 | `--freq HZ` | frequenza, default 1090000000 |
 | `--serial S` | quale HackRF usare, se ne hai più di uno |
+| `--no-fix` | non correggere i messaggi con un bit sbagliato |
 | `--soglia X` | quanto sopra il rumore deve stare un preambolo (default 2.0) |
 | `--web PORTA` | porta della mappa (default 8101, `0` la disattiva) |
 | `--no-browser` | non aprire il browser da solo |
@@ -113,6 +114,13 @@ trasmettendo.
 Il CRC è la difesa contro i falsi positivi: su rumore puro passano migliaia di
 preamboli al secondo, e nessuno di questi supera il CRC.
 
+Siccome il CRC è lineare, un errore su un singolo bit produce un resto che
+identifica **esattamente quale** bit è sbagliato: si gira e il messaggio è
+recuperato. Sui segnali deboli è la differenza fra vedere un aereo e perderlo.
+La correzione si applica solo a DF17/DF18 e viene rifiutata se cambia il DF; su
+due minuti di solo rumore non ha prodotto nessun falso positivo. Si disattiva
+con `--no-fix`.
+
 ### Decodifica
 
 Dal campo ME di 56 bit, in base al *type code*:
@@ -145,9 +153,10 @@ strumenti/genera_iq.py prova.iq
 ./adsb-catcher.py --file prova.iq --loop --qth 52.0,3.4   # per vedere la mappa
 ```
 
-Ci sono anche i controlli sul decoder, su messaggi di riferimento a risultato
-noto (CRC, `KLM1023`, 38000 ft, 52.2572 N 3.9194 E, 159 kt, 183°, −832 ft/min,
-e lo scarto di un messaggio corrotto):
+Ci sono anche 16 controlli sul decoder, su messaggi di riferimento a risultato
+noto: CRC, `KLM1023`, 38000 ft, 52.2572 N 3.9194 E, 159 kt, 183°, −832 ft/min,
+il recupero di tutti e 112 i possibili errori a un bit, e lo scarto di un
+messaggio con due bit sbagliati.
 
 ```sh
 ./adsb-catcher.py --selftest
@@ -167,14 +176,18 @@ Alzare i guadagni **non** rimedia: oltre un certo punto si amplifica solo il
 rumore. Il punto di lavoro giusto è quello in cui il rumore occupa pochi bit
 del convertitore — indicativamente LNA 40 e VGA 40, e da lì si aggiusta.
 
-Per capire se il problema è l'antenna o il software, cattura qualche secondo di
-segnale grezzo e cerca le raffiche: un messaggio ADS-B dura esattamente 120 µs
-(o 64 µs se corto). Se non ce ne sono, non è il decoder.
+Per capire se il problema è l'antenna o il software c'è uno strumento apposta.
+Cattura un po' di segnale grezzo e passaglielo: cerca i messaggi nel modo più
+sensibile possibile, molto più del programma vero, e usa il CRC come giudice.
 
 ```sh
 hackrf_transfer -r prova.iq -f 1090000000 -s 2000000 -b 2500000 -a 1 -l 40 -g 40
-./adsb-catcher.py --file prova.iq --raw
+strumenti/cerca_messaggi.py prova.iq
 ```
+
+Se non trova niente nemmeno lui, non è il decoder: è l'antenna, la posizione o
+l'assenza di traffico. Nel dubbio guarda la distribuzione dei DF che stampa: se
+è uniforme intorno al 3,1%, stai ricevendo solo rumore.
 
 ## Prestazioni
 
@@ -184,8 +197,7 @@ vettorizzata in numpy e decodifica in Python solo sui candidati sopravvissuti.
 
 ## Limiti noti
 
-* niente correzione d'errore sul CRC: i messaggi con un bit sbagliato si
-  perdono invece di essere recuperati
+* correzione d'errore solo a un bit: da due in su il messaggio si perde
 * altitudini codificate Gillham (Q=0, sopra i 50.000 ft) non decodificate
 * posizioni al suolo solo con `--qth` o dopo una posizione già nota
 * nessun formato d'uscita per altri programmi (BaseStation, Beast)

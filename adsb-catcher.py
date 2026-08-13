@@ -75,6 +75,33 @@ def crc(msg):
     return rem
 
 
+def _tabella_sindromi(nbyte):
+    """Resto prodotto da un errore su ciascun singolo bit.
+
+    Il CRC e' lineare, quindi crc(messaggio con un bit girato) vale
+    crc(messaggio) XOR crc(quel bit da solo): se il resto compare in questa
+    tabella, sappiamo esattamente quale bit rimettere a posto."""
+    tab = {}
+    for p in range(nbyte * 8):
+        e = bytearray(nbyte)
+        e[p // 8] = 1 << (7 - p % 8)
+        tab[crc(bytes(e))] = p
+    return tab
+
+
+SINDROMI = {14: _tabella_sindromi(14), 7: _tabella_sindromi(7)}
+
+
+def correggi_un_bit(msg):
+    """Ripara un errore singolo, se il resto lo identifica. Altrimenti None."""
+    p = SINDROMI[len(msg)].get(crc(msg))
+    if p is None:
+        return None
+    riparato = bytearray(msg)
+    riparato[p // 8] ^= 1 << (7 - p % 8)
+    return bytes(riparato)
+
+
 # ---------------------------------------------------------------------------
 # Decodifica dei campi ADS-B
 # ---------------------------------------------------------------------------
@@ -268,11 +295,13 @@ class Aereo:
 class Decoder:
     """Tiene la tabella degli aerei e ci applica sopra i messaggi decodificati."""
 
-    def __init__(self, riferimento=None, scadenza=300.0):
+    def __init__(self, riferimento=None, scadenza=300.0, correggi=True):
         self.aerei = {}
         self.riferimento = riferimento      # (lat, lon) del ricevitore, opzionale
         self.scadenza = scadenza
+        self.correggi = correggi
         self.n_crc_ok = 0
+        self.n_corretti = 0
         self.n_posizioni = 0
 
     def messaggio(self, msg, rssi, adesso):
@@ -280,9 +309,21 @@ class Decoder:
         df = msg[0] >> 3
 
         if df in (17, 18):
+            corretto = False
             if crc(msg) != 0:
-                return None
+                # un solo bit sbagliato si ripara: sui segnali deboli e' la
+                # differenza fra vedere l'aereo e perderlo
+                if not self.correggi:
+                    return None
+                msg = correggi_un_bit(msg)
+                # se l'errore era nei primi 5 bit il DF cambia: allora non era
+                # davvero un DF17 e la "correzione" non vale niente
+                if msg is None or msg[0] >> 3 != df:
+                    return None
+                corretto = True
             icao = int.from_bytes(msg[1:4], "big")
+            if corretto:
+                self.n_corretti += 1
         elif df == 11:
             if crc(msg) > 127:              # oltre 127 non e' un interrogator ID valido
                 return None
@@ -550,7 +591,8 @@ def tabella(dec, avvio, adesso, stat):
     con_pos = sum(1 for a in aerei if a.lat is not None)
     righe.append("")
     righe.append(f"aerei: {len(aerei)} ({con_pos} con posizione)   "
-                 f"messaggi validi: {dec.n_crc_ok} ({dec.n_crc_ok / durata:.1f}/s)   "
+                 f"messaggi validi: {dec.n_crc_ok} ({dec.n_crc_ok / durata:.1f}/s"
+                 f"{f', {dec.n_corretti} corretti' if dec.n_corretti else ''})   "
                  f"preamboli: {stat['cand']}   "
                  f"attivo da {int(durata) // 60}m{int(durata) % 60:02d}s")
     return "\n".join(righe)
@@ -782,6 +824,7 @@ def istantanea(dec, avvio, adesso):
             "aerei": len(aerei),
             "conpos": sum(1 for a in aerei if a["lat"] is not None),
             "msg": dec.n_crc_ok, "rate": dec.n_crc_ok / durata,
+            "corretti": dec.n_corretti,
             "durata": f"{durata // 60}m{durata % 60:02d}s",
         },
         "aerei": aerei,
@@ -881,9 +924,30 @@ def selftest():
     verifica("rotta", 183, round(a.rotta))
     verifica("velocita' verticale", -832, a.vs)
 
-    guasto = bytearray(ident)
-    guasto[5] ^= 0x40
-    verifica("messaggio corrotto scartato", None, d.messaggio(bytes(guasto), -20.0, 4.0))
+    # un bit girato si deve recuperare, due no
+    uno = bytearray(ident); uno[5] ^= 0x40
+    senza = Decoder(correggi=False)
+    verifica("un bit sbagliato, correzione spenta", None,
+             senza.messaggio(bytes(uno), -20.0, 4.0))
+    con = Decoder(correggi=True)
+    verifica("un bit sbagliato, corretto", 0x4840D6,
+             con.messaggio(bytes(uno), -20.0, 4.0))
+    verifica("identificativo dopo la correzione", "KLM1023",
+             con.aerei[0x4840D6].volo if 0x4840D6 in con.aerei else None)
+    verifica("conteggio delle correzioni", 1, con.n_corretti)
+
+    due = bytearray(ident); due[5] ^= 0x40; due[9] ^= 0x02
+    verifica("due bit sbagliati, scartato", None,
+             Decoder(correggi=True).messaggio(bytes(due), -20.0, 5.0))
+
+    # ogni singolo bit del messaggio deve essere recuperabile
+    recuperati = 0
+    for p in range(112):
+        g = bytearray(ident); g[p // 8] ^= 1 << (7 - p % 8)
+        r = correggi_un_bit(bytes(g))
+        if r == ident:
+            recuperati += 1
+    verifica("bit recuperabili su 112", 112, recuperati)
 
     print()
     if all(esiti):
@@ -921,6 +985,8 @@ def main(argv=None):
                    help="spegne il preamplificatore RF (+14 dB)")
     p.add_argument("--freq", type=int, default=FREQ, help="frequenza in Hz")
     p.add_argument("--serial", help="numero di serie dell'HackRF, se ne hai piu' di uno")
+    p.add_argument("--no-fix", dest="correggi", action="store_false",
+                   help="non correggere i messaggi con un bit sbagliato")
     p.add_argument("--soglia", type=float, default=2.0,
                    help="quanto sopra il rumore deve stare un preambolo (piu' basso = "
                         "piu' sensibile ma piu' CPU)")
@@ -962,7 +1028,7 @@ def main(argv=None):
                 input("\nPremi Invio per chiudere... ")
             return 1
 
-    dec = Decoder(riferimento=args.qth)
+    dec = Decoder(riferimento=args.qth, correggi=args.correggi)
     demod = Demodulatore(soglia=args.soglia)
     tty = sys.stdout.isatty() and not args.raw
     avvio = time.monotonic()
