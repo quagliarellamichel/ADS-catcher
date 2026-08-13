@@ -17,6 +17,7 @@ inventata.
 import importlib.util
 import json
 import os
+import re
 import socket
 import sys
 import unittest
@@ -445,6 +446,22 @@ class TestWeb(unittest.TestCase):
                       "hashchange", "In ascolto da"):
             with self.subTest(pezzo=pezzo):
                 self.assertIn(pezzo, ads.PAGINA)
+
+    def test_ogni_categoria_ha_la_sua_sagoma(self):
+        # le categorie stanno in Python, le sagome in JavaScript: se qualcuno
+        # aggiunge una categoria e si dimentica l'icona, se ne accorge qui
+        blocco = ads.PAGINA[ads.PAGINA.index("const FORME = {"):
+                            ads.PAGINA.index("const FORMA_IGNOTA")]
+        chiavi = set(re.findall(r'"([^"]+)":\s*\{', blocco))
+        self.assertEqual(set(ads.CATEGORIE.values()), chiavi)
+
+    def test_sagome_non_orientabili_non_ruotano(self):
+        # pallone e paracadute non hanno un muso: ruotarli non vuol dire niente
+        blocco = ads.PAGINA[ads.PAGINA.index("const FORME = {"):
+                            ads.PAGINA.index("const FORMA_IGNOTA")]
+        ferme = {k for k, corpo in re.findall(r'"([^"]+)":\s*\{([^}]*)\}', blocco)
+                 if "ruota: false" in corpo}
+        self.assertEqual(ferme, {"piu' leggero dell'aria", "paracadutista"})
 
     def test_coordinate_col_punto_decimale(self):
         # con toLocaleString italiano verrebbe "52,2572, 3,9194": illeggibile

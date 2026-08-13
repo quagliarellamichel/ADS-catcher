@@ -61,6 +61,33 @@ locali, è solo la cartografia a essere remota.
 Impacchettare Leaflet dentro al sorgente non aiuterebbe: le tessere restano
 comunque remote, e senza rete la mappa sarebbe vuota lo stesso.
 
+## Sagome per categoria, non per modello
+
+L'ADS-B **non trasmette il modello dell'aereo**. I siti che mostrano "A320" o
+"B738" prendono quel dato da un database esterno indicizzato per indirizzo
+ICAO, che va scaricato e tenuto aggiornato.
+
+Quello che i messaggi portano davvero è la **categoria**, nei soli messaggi di
+identificazione (TC 1-4): classe di peso, oppure elicottero, aliante, pallone,
+paracadutista, UAV, veicolo di superficie. Su quella si differenzia la sagoma,
+e la classe di peso si legge dalla dimensione del simbolo.
+
+Due dettagli che sembrano pignoleria e non lo sono:
+
+- **pallone e paracadute non ruotano.** Non hanno un muso: orientarli secondo la
+  rotta darebbe un pallone inclinato, che non significa niente.
+- **i mezzi a terra hanno le ruote disegnate.** Stanno tutti a quota zero,
+  quindi il colore per quota li rende identici: se anche la sagoma fosse una
+  pillola liscia non si distinguerebbero da nient'altro.
+
+Finché un aereo non manda un messaggio di identificazione resta la sagoma
+generica: è la condizione normale per la maggior parte dei contatti, non un
+difetto.
+
+La tabella delle categorie sta in Python e quella delle sagome in JavaScript. Un
+test le confronta: aggiungere una categoria senza la sua icona fa fallire la
+suite.
+
 ## L'aereo scelto sta nell'ancora dell'indirizzo
 
 `#40621D` nell'URL apre la scheda di quell'aereo. Costa tre righe e dà un

@@ -76,6 +76,12 @@ un `data.json` che il browser rilegge ogni secondo. Mostra:
 
 * aerei orientati secondo la rotta, colorati per quota (verde in basso →
   viola in quota), con etichetta volo e altitudine
+* **sagoma diversa per categoria**: aereo, aliante, elicottero, pallone,
+  paracadute, drone, razzo, mezzo a terra — e dimensione che cresce con la
+  classe di peso. Pallone e paracadute non ruotano, perché non hanno un muso.
+  Attenzione: l'ADS-B **non trasmette il modello** dell'aereo, solo la
+  categoria, e solo nei messaggi di identificazione: finché un aereo non si
+  presenta resta la sagoma generica
 * la scia del percorso, fino a 300 punti per aereo
 * elenco ordinato, statistiche, e clic su una riga per centrare l'aereo
 * con `--qth`: il ricevitore e gli anelli a 100/200/300 km

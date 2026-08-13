@@ -145,7 +145,7 @@ degli aerei con il server, ma gliene passa una fotografia già pronta.
 
 ```mermaid
 flowchart LR
-    A["data.json<br/>ogni secondo"] --> B["marcatori<br/>orientati per rotta,<br/>colorati per quota"]
+    A["data.json<br/>ogni secondo"] --> B["marcatori<br/>sagoma per categoria,<br/>orientati per rotta,<br/>colorati per quota"]
     A --> C["scie<br/>fino a 300 punti"]
     A --> D["elenco ordinato<br/>per ultimo avvistamento"]
     A --> E["scheda dettagli<br/>dell'aereo scelto"]

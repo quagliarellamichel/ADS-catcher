@@ -680,9 +680,90 @@ PAGINA = r"""<!doctype html>
 </div>
 <div id="avviso"></div>
 <script>
-const SVG = '<svg viewBox="0 0 24 24" width="26" height="26">' +
-  '<path fill="COLORE" stroke="#0b0e12" stroke-width="0.7" ' +
-  'd="M12 1.6 13.5 9 22.5 13.4v1.9L13.5 12.9 13.2 19.3 16.6 21.4v1.2L12 21.4 7.4 22.6v-1.2L10.8 19.3 10.5 12.9 1.5 15.3v-1.9L10.5 9Z"/></svg>';
+// --- forme dei mezzi -------------------------------------------------------
+// L'ADS-B non dice il modello dell'aereo: quello starebbe in un database
+// esterno indicizzato per indirizzo ICAO. Dice pero' la categoria, e su quella
+// si differenzia forma e dimensione. Arriva solo con i messaggi TC 1-4, quindi
+// finche' un aereo non si presenta resta la sagoma generica.
+const BORDO = 'stroke="#0b0e12" stroke-width=".7" stroke-linejoin="round"';
+
+const AEREO = `<path fill="COLORE" ${BORDO} d="M12 1.6 13.5 9 22.5 13.4v1.9L13.5 \
+12.9 13.2 19.3 16.6 21.4v1.2L12 21.4 7.4 22.6v-1.2L10.8 19.3 10.5 12.9 1.5 \
+15.3v-1.9L10.5 9Z"/>`;
+
+// ali lunghe e sottili, fusoliera snella
+const ALIANTE = `<path fill="COLORE" ${BORDO} d="M12 1.8 12.7 10.2 23.4 12.3v1.1\
+L12.7 13.3 12.5 19.6 15.2 21.4v1.1L12 20.6 8.8 21.5v-1.1L11.5 19.6 11.3 13.3 \
+.6 14.4v-1.1L11.3 10.2Z"/>`;
+
+// vista dall'alto: fusoliera tozza, trave di coda, e il rotore che attraversa
+// il corpo. Con la barra appoggiata sopra sembrava una T.
+const ELICOTTERO = `<path fill="COLORE" ${BORDO} d="M12 2.6c2.6 0 4.7 2.1 4.7 \
+4.7v3.6h2.1v1.5h-2.1v2.3c0 1.8-1 3.3-2.5 4.1v3.2h2.1v1.4H7.7v-1.4h2.1v-3.2\
+c-1.5-.8-2.5-2.3-2.5-4.1v-2.3H5.2v-1.5h2.1V7.3c0-2.6 2.1-4.7 4.7-4.7z"/>\
+<rect x="1.4" y="10.5" width="21.2" height="1.5" rx=".75" fill="COLORE" ${BORDO}/>\
+<circle cx="12" cy="11.25" r="1.5" fill="COLORE" ${BORDO}/>`;
+
+// involucro allungato con navicella sotto
+const PALLONE = `<path fill="COLORE" ${BORDO} d="M12 1.8c3.4 0 6.1 3.3 6.1 7.4 \
+0 3.5-2 6.4-4.7 7.2v1.4h1.5v1.3h-1.5v3.1h-2.8v-3.1H9.1v-1.3h1.5v-1.4C7.9 15.6 \
+5.9 12.7 5.9 9.2c0-4.1 2.7-7.4 6.1-7.4z"/>`;
+
+// calotta, funi, corpo appeso
+const PARACADUTE = `<path fill="COLORE" ${BORDO} d="M12 2.2c-5.1 0-9.2 3.7-9.2 \
+8.2h3.4c0-.5.1-1 .2-1.5l3.9 1.5L12 21.6l1.7-11.2 3.9-1.5c.1.5.2 1 .2 1.5h3.4\
+c0-4.5-4.1-8.2-9.2-8.2z"/>`;
+
+// quadricottero visto dall'alto
+const DRONE = `<g fill="COLORE" ${BORDO}><path d="M7.6 7.6h8.8v8.8H7.6z"/>\
+<path d="M5.4 5.4 9 9 7.6 10.4 4 6.8zm13.2 0L15 9l1.4 1.4L20 6.8zm0 13.2L15 15\
+l1.4-1.4 3.6 3.6zm-13.2 0L9 15l-1.4-1.4-3.6 3.6z"/><circle cx="4.6" cy="4.6" \
+r="2.6"/><circle cx="19.4" cy="4.6" r="2.6"/><circle cx="4.6" cy="19.4" r="2.6"/>\
+<circle cx="19.4" cy="19.4" r="2.6"/></g>`;
+
+// mezzo a terra visto dall'alto: cabina, cassone e ruote. Una pillola liscia
+// non si capiva, e a quota zero il colore e' uguale per tutti.
+const VEICOLO = `<path fill="COLORE" ${BORDO} d="M8.6 2.8h6.8c1 0 1.7.8 1.7 \
+1.7v14.9c0 1-.8 1.7-1.7 1.7H8.6c-1 0-1.7-.8-1.7-1.7V4.5c0-1 .8-1.7 1.7-1.7z"/>\
+<path fill="none" stroke="#0b0e12" stroke-width=".9" d="M7.4 8.4h9.2M7.4 14h9.2"/>\
+<g fill="#0b0e12"><rect x="5.2" y="5.4" width="1.9" height="3.4" rx=".8"/>\
+<rect x="16.9" y="5.4" width="1.9" height="3.4" rx=".8"/>\
+<rect x="5.2" y="14.8" width="1.9" height="3.4" rx=".8"/>\
+<rect x="16.9" y="14.8" width="1.9" height="3.4" rx=".8"/></g>`;
+
+const RAZZO = `<path fill="COLORE" ${BORDO} d="M12 1.4c2.3 2.5 3.6 5.9 3.6 \
+9.6v4.4l2.9 3.1v1.6l-3.6-1.6-.7 3.1h-4.4l-.7-3.1L5.5 20.1v-1.6l2.9-3.1v-4.4\
+c0-3.7 1.3-7.1 3.6-9.6z"/>`;
+
+// scala: la classe di peso si legge dalla dimensione del simbolo
+const FORME = {
+  "leggero":                 {m: AEREO, s: .80},
+  "medio":                   {m: AEREO, s: 1.00},
+  "grande":                  {m: AEREO, s: 1.12},
+  "scia forte":              {m: AEREO, s: 1.20},
+  "pesante":                 {m: AEREO, s: 1.30},
+  "alte prestazioni":        {m: AEREO, s: .95},
+  "ultraleggero":            {m: AEREO, s: .72},
+  "elicottero":              {m: ELICOTTERO, s: 1.00},
+  "aliante":                 {m: ALIANTE, s: 1.00},
+  "piu' leggero dell'aria":  {m: PALLONE, s: 1.05, ruota: false},
+  "paracadutista":           {m: PARACADUTE, s: .95, ruota: false},
+  "UAV":                     {m: DRONE, s: .90},
+  "spaziale":                {m: RAZZO, s: 1.00},
+  "mezzo di emergenza":      {m: VEICOLO, s: .85},
+  "mezzo di servizio":       {m: VEICOLO, s: .85},
+};
+const FORMA_IGNOTA = {m: AEREO, s: 1.00};
+
+function forma(cat) { return FORME[cat] || FORMA_IGNOTA; }
+
+function disegno(cat, col) {
+  const f = forma(cat);
+  const scala = f.s === 1 ? ''
+    : ` transform="translate(12 12) scale(${f.s}) translate(-12 -12)"`;
+  return `<svg viewBox="0 0 24 24" width="26" height="26"><g${scala}>`
+       + f.m.replace(/COLORE/g, col) + `</g></svg>`;
+}
 
 if (typeof L === 'undefined') {
   const a = document.getElementById('avviso');
@@ -714,13 +795,15 @@ function colore(alt) {
 }
 
 function icona(a, evidenzia) {
-  const rot = (a.rot === null || a.rot === undefined) ? 0 : a.rot;
+  // pallone e paracadute non hanno un muso: ruotarli non vorrebbe dire niente
+  const gira = forma(a.cat).ruota !== false;
+  const rot = (gira && a.rot !== null && a.rot !== undefined) ? a.rot : 0;
   const et = (a.volo || a.icao) + (a.alt !== null ? ' · ' + a.alt.toLocaleString('it-IT') : '');
   return L.divIcon({
     className: '',
     iconSize: [26, 26], iconAnchor: [13, 13],
     html: `<div class="aereo" style="transform:rotate(${rot}deg);opacity:${evidenzia ? 1 : .85}">`
-        + SVG.replace('COLORE', colore(a.alt)) + `</div><div class="et">${et}</div>`
+        + disegno(a.cat, colore(a.alt)) + `</div><div class="et">${et}</div>`
   });
 }
 
@@ -835,6 +918,7 @@ async function aggiorna() {
       marcatori[a.icao].on('click', () => selezione(a.icao));
     }
     const testo = `<b>${a.volo || a.icao}</b><br>${a.icao}`
+      + (a.cat ? ` · ${a.cat}` : '')
       + (a.alt !== null ? `<br>${fmt(a.alt)} ft` : '')
       + (a.vel !== null ? ` · ${fmt(a.vel)} kt` : '')
       + (a.km !== null && a.km !== undefined ? `<br>${fmt(a.km,1)} km` : '');
