@@ -626,6 +626,10 @@ PAGINA = r"""<!doctype html>
   #stat { padding:0 12px 8px; color:#8b97a8; font-size:12px;
           border-bottom:1px solid #2b3340; }
   #stat b { color:#e6e9ef; font-weight:600; }
+  #vettore { padding:6px 12px; color:#8b97a8; font-size:12px; border-bottom:1px solid #2b3340; }
+  #vettore button { background:#1f2630; color:#c9d1dc; border:1px solid #2b3340; border-radius:4px;
+                    padding:2px 9px; margin-left:4px; font:inherit; cursor:pointer; }
+  #vettore button.on { background:#3a6df0; border-color:#3a6df0; color:#fff; }
   /* overflow-y auto e non visible: cosi' la scheda puo' rimpicciolirsi e su
      schermi bassi non schiaccia l'elenco a zero */
   #dettaglio { display:none; padding:10px 12px; border-bottom:1px solid #2b3340;
@@ -672,6 +676,8 @@ PAGINA = r"""<!doctype html>
 <div id="pannello">
   <h1>ADS-catcher <span id="orologio"></span></h1>
   <div id="stat">in attesa dei dati…</div>
+  <div id="vettore">vettore di predizione
+    <button data-min="10" class="on">10 min</button><button data-min="30">30 min</button><button data-min="60">1 h</button></div>
   <div id="dettaglio"></div>
   <div id="lista"><table><thead><tr>
     <th>Volo</th><th>Alt ft</th><th>kt</th><th>Rot</th><th>V/S</th>
@@ -780,7 +786,29 @@ if (mappa) {
   }).addTo(mappa);
 }
 
-const marcatori = {}, scie = {};
+const marcatori = {}, scie = {}, vettori = {};
+// vettore di predizione stile radar: dove sara' l'aereo fra vettoreMin minuti
+// a velocita' e rotta costanti, lungo l'arco di cerchio massimo.
+// TACCA: minuti fra una tacca e l'altra per ogni lunghezza del vettore
+const TACCA = {10: 2, 30: 5, 60: 10};
+let vettoreMin = 10;
+document.querySelectorAll('#vettore button').forEach(b => b.onclick = () => {
+  vettoreMin = +b.dataset.min;
+  document.querySelectorAll('#vettore button').forEach(x => x.classList.toggle('on', x === b));
+  aggiorna();
+});
+function proiezione(lat, lon, rot, kt, minuti, passo) {
+  const R = 6371, rad = Math.PI / 180, th = rot * rad, f1 = lat * rad, l1 = lon * rad;
+  const pts = [];
+  for (let m = 0; m <= minuti + 1e-9; m += passo) {
+    const d = kt * 1.852 * m / 60 / R;
+    const f2 = Math.asin(Math.sin(f1)*Math.cos(d) + Math.cos(f1)*Math.sin(d)*Math.cos(th));
+    const l2 = l1 + Math.atan2(Math.sin(th)*Math.sin(d)*Math.cos(f1),
+                               Math.cos(d) - Math.sin(f1)*Math.sin(f2));
+    pts.push([f2 / rad, l2 / rad]);
+  }
+  return pts;
+}
 let qthFatto = false, inquadrato = false;
 // l'aereo scelto sta nell'ancora dell'indirizzo: il link resta condivisibile
 // e ricaricando la pagina la scheda e' ancora aperta
@@ -929,11 +957,25 @@ async function aggiorna() {
       else scie[a.icao] = L.polyline(a.traccia, {color: colore(a.alt), weight:1.5,
                                                  opacity:.55}).addTo(mappa);
     }
+    if (a.vel && a.rot !== null) {
+      // ponytail: gruppo ricreato a ogni aggiornamento (1/s), basta per decine di aerei
+      const passo = TACCA[vettoreMin] / 2;  // un punto ogni mezza tacca
+      const p = proiezione(a.lat, a.lon, a.rot, a.vel, vettoreMin, passo), col = colore(a.alt);
+      if (vettori[a.icao]) mappa.removeLayer(vettori[a.icao]);
+      const g = L.layerGroup([L.polyline(p, {color: col, weight:1.5, opacity:.8, dashArray:'4 6'})]);
+      // tacca ogni 10 minuti, cerchio pieno sulla punta
+      p.forEach((q, i) => { if (i && i % 2 === 0) g.addLayer(L.circleMarker(q,
+        i === p.length - 1 ? {radius:5, color:col, weight:2, fillColor:col, fillOpacity:.35}
+                           : {radius:2, color:col, weight:1, fillOpacity:1})
+        .bindTooltip(`${a.volo || a.icao}: fra ${i * passo} min`)); });
+      vettori[a.icao] = g.addTo(mappa);
+    } else if (vettori[a.icao]) { mappa.removeLayer(vettori[a.icao]); delete vettori[a.icao]; }
   }
   for (const icao of Object.keys(marcatori)) {
     if (!vivi.has(icao)) {
       mappa.removeLayer(marcatori[icao]); delete marcatori[icao];
       if (scie[icao]) { mappa.removeLayer(scie[icao]); delete scie[icao]; }
+      if (vettori[icao]) { mappa.removeLayer(vettori[icao]); delete vettori[icao]; }
     }
   }
   if (mappa && !inquadrato && conPos.length) {
@@ -1299,7 +1341,12 @@ def main(argv=None):
         pass
     finally:
         if proc is not None:
-            proc.send_signal(signal.SIGINT)
+            # Windows non sa mandare SIGINT a un altro processo (ValueError):
+            # li' si chiude con terminate()
+            if os.name == "nt":
+                proc.terminate()
+            else:
+                proc.send_signal(signal.SIGINT)
             try:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
