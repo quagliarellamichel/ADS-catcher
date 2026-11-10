@@ -1341,7 +1341,12 @@ def main(argv=None):
         pass
     finally:
         if proc is not None:
-            proc.send_signal(signal.SIGINT)
+            # Windows non sa mandare SIGINT a un altro processo (ValueError):
+            # li' si chiude con terminate()
+            if os.name == "nt":
+                proc.terminate()
+            else:
+                proc.send_signal(signal.SIGINT)
             try:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
