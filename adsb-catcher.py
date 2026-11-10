@@ -780,7 +780,22 @@ if (mappa) {
   }).addTo(mappa);
 }
 
-const marcatori = {}, scie = {};
+const marcatori = {}, scie = {}, vettori = {};
+// vettore di predizione stile radar: dove sara' l'aereo fra VETTORE_MIN minuti
+// a velocita' e rotta costanti, lungo l'arco di cerchio massimo
+const VETTORE_MIN = 60;
+function proiezione(lat, lon, rot, kt, minuti) {
+  const R = 6371, rad = Math.PI / 180, th = rot * rad, f1 = lat * rad, l1 = lon * rad;
+  const pts = [];
+  for (let m = 0; m <= minuti; m += 5) {
+    const d = kt * 1.852 * m / 60 / R;
+    const f2 = Math.asin(Math.sin(f1)*Math.cos(d) + Math.cos(f1)*Math.sin(d)*Math.cos(th));
+    const l2 = l1 + Math.atan2(Math.sin(th)*Math.sin(d)*Math.cos(f1),
+                               Math.cos(d) - Math.sin(f1)*Math.sin(f2));
+    pts.push([f2 / rad, l2 / rad]);
+  }
+  return pts;
+}
 let qthFatto = false, inquadrato = false;
 // l'aereo scelto sta nell'ancora dell'indirizzo: il link resta condivisibile
 // e ricaricando la pagina la scheda e' ancora aperta
@@ -929,11 +944,24 @@ async function aggiorna() {
       else scie[a.icao] = L.polyline(a.traccia, {color: colore(a.alt), weight:1.5,
                                                  opacity:.55}).addTo(mappa);
     }
+    if (a.vel && a.rot !== null) {
+      // ponytail: gruppo ricreato a ogni aggiornamento (1/s), basta per decine di aerei
+      const p = proiezione(a.lat, a.lon, a.rot, a.vel, VETTORE_MIN), col = colore(a.alt);
+      if (vettori[a.icao]) mappa.removeLayer(vettori[a.icao]);
+      const g = L.layerGroup([L.polyline(p, {color: col, weight:1.5, opacity:.8, dashArray:'4 6'})]);
+      // tacca ogni 10 minuti, cerchio pieno sulla punta
+      p.forEach((q, i) => { if (i && i % 2 === 0) g.addLayer(L.circleMarker(q,
+        i === p.length - 1 ? {radius:5, color:col, weight:2, fillColor:col, fillOpacity:.35}
+                           : {radius:2, color:col, weight:1, fillOpacity:1})
+        .bindTooltip(`${a.volo || a.icao}: fra ${i * 5} min`)); });
+      vettori[a.icao] = g.addTo(mappa);
+    } else if (vettori[a.icao]) { mappa.removeLayer(vettori[a.icao]); delete vettori[a.icao]; }
   }
   for (const icao of Object.keys(marcatori)) {
     if (!vivi.has(icao)) {
       mappa.removeLayer(marcatori[icao]); delete marcatori[icao];
       if (scie[icao]) { mappa.removeLayer(scie[icao]); delete scie[icao]; }
+      if (vettori[icao]) { mappa.removeLayer(vettori[icao]); delete vettori[icao]; }
     }
   }
   if (mappa && !inquadrato && conPos.length) {

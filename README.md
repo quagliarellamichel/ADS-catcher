@@ -83,6 +83,10 @@ un `data.json` che il browser rilegge ogni secondo. Mostra:
   categoria, e solo nei messaggi di identificazione: finché un aereo non si
   presenta resta la sagoma generica
 * la scia del percorso, fino a 300 punti per aereo
+* il **vettore di predizione**, come sugli schermi radar: una linea tratteggiata
+  lungo il cerchio massimo fino a dove sarà l'aereo fra 60 minuti a velocità e
+  rotta costanti, con una tacca ogni 10 minuti e un cerchio sulla punta. La
+  velocità è quella al suolo, quindi il vento è già compreso
 * elenco ordinato, statistiche, e clic su una riga per centrare l'aereo
 * con `--qth`: il ricevitore e gli anelli a 100/200/300 km
 
